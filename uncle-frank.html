@@ -78,9 +78,27 @@
 </head>
 <body>
 
+<!-- 로그인 화면 -->
+<div id="login-screen" style="position:fixed;inset:0;background:linear-gradient(180deg,#EAF4FF 0%,#D4E9F7 60%,#C8E0F2 100%);display:flex;align-items:center;justify-content:center;z-index:1000;">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:24px;width:300px;">
+    <svg width="220" height="64" viewBox="0 0 280 160" aria-label="Uncle Frank 로고">
+      <path d="M52 52 Q80 24 108 44" fill="none" stroke="#C84828" stroke-width="8" stroke-linecap="round"/>
+      <path d="M172 44 Q200 24 228 52" fill="none" stroke="#C84828" stroke-width="8" stroke-linecap="round"/>
+      <path d="M48 92 Q140 136 232 92" fill="none" stroke="#C84828" stroke-width="8" stroke-linecap="round"/>
+      <text x="140" y="148" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="30" fill="#C84828" letter-spacing="1">Uncle Frank</text>
+    </svg>
+    <div style="width:100%;background:rgba(255,255,255,0.65);border-radius:16px;padding:24px 20px;display:flex;flex-direction:column;gap:12px;border:0.5px solid #B8D4EE;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+      <p style="font-size:13px;color:#5A7A96;text-align:center;margin:0;">이름을 입력하고 입장하세요</p>
+      <input id="login-name-input" type="text" placeholder="이름" maxlength="12"
+        style="padding:10px 14px;border:0.5px solid #B8D4EE;border-radius:10px;font-size:15px;font-family:inherit;background:#fff;color:#222;outline:none;text-align:center;"/>
+      <button onclick="doLogin()" style="padding:11px;background:#C84828;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer;">입장하기</button>
+    </div>
+  </div>
+</div>
+
 <input type="file" id="photo-input" accept="image/*" style="display:none"/>
 
-<div id="app">
+<div id="app" style="display:none;">
   <div id="sidebar">
     <div id="logo-area">
       <svg width="148" height="42" viewBox="0 0 280 160" aria-label="Uncle Frank 로고" role="img">
@@ -116,101 +134,356 @@
   </div>
 </div>
 
+<script src="/socket.io/socket.io.js"></script>
 <script>
-var CLR=['#A8E6CF','#FFD3B6','#D4A5D5','#85C1E9','#F9A7B0','#B8D4A8'];
-var me={name:'나',status:'Uncle Frank 사용 중 😄',photo:null};
-var friends=[
-  {id:1,name:'민준',color:'#A8E6CF',online:true,status:'민준',photo:null},
-  {id:2,name:'수진',color:'#FFD3B6',online:true,status:'수진',photo:null},
-  {id:3,name:'서연',color:'#D4A5D5',online:false,status:'영화 보는 중 🎬',photo:null},
-  {id:4,name:'태호',color:'#85C1E9',online:true,status:'헬스장 다녀오는 길',photo:null},
-  {id:5,name:'지은',color:'#F9A7B0',online:false,status:'지은',photo:null},
-  {id:6,name:'현우',color:'#B8D4A8',online:false,status:'공부 중... 😭',photo:null}
-];
-var chats=[
-  {id:1,type:'dm',name:'민준',friendName:'민준',avatarType:'uf',color:'#A8E6CF',members:['민준'],unread:2,messages:[
-    {s:'민준',t:'야 오늘 뭐해?',time:'오후 1:20'},{s:'민준',t:'점심 같이 먹자',time:'오후 1:21'},
-    {s:'me',t:'나 지금 바빠 ㅋㅋ',time:'오후 1:30'},{s:'민준',t:'그래 ㅠㅠ 담에 보자',time:'오후 1:31'}
-  ]},
-  {id:2,type:'group',name:'우리 동네 친구들 🏠',friendName:null,avatarType:'group',color:'#FFD3B6',members:['수진','태호','지은'],unread:5,messages:[
-    {s:'sys',t:'2025년 5월 19일',time:''},{s:'수진',t:'이번 주말에 다들 뭐해?',time:'오전 10:05'},
-    {s:'태호',t:'나 시간 됨!',time:'오전 10:07'},{s:'me',t:'좋아 그럼 토요일 저녁 어때?',time:'오전 10:12'},
-    {s:'수진',t:'오케이 완전 좋아!!',time:'오전 10:13'}
-  ]},
-  {id:3,type:'dm',name:'서연',friendName:'서연',avatarType:'uf',color:'#D4A5D5',members:['서연'],unread:0,messages:[
-    {s:'me',t:'저번에 말했던 영화 봤어?',time:'어제'},{s:'서연',t:'응 완전 재밌었어! 고마워~',time:'어제'}
-  ]},
-  {id:4,type:'group',name:'스터디 그룹 📚',friendName:null,avatarType:'group',color:'#85C1E9',members:['현우','미래','준호'],unread:0,messages:[
-    {s:'현우',t:'다음 미팅 날짜 정해야 할 것 같아요',time:'월요일'},{s:'me',t:'수요일 괜찮아요!',time:'월요일'}
-  ]}
-];
-var activeId=null,curTab='f',nextId=20,selected=[],renamingId=null;
+var socket = null;
+var CLR = ['#A8E6CF','#FFD3B6','#D4A5D5','#85C1E9','#F9A7B0','#B8D4A8'];
+var me = { name: '', status: 'Uncle Frank 사용 중 😄', photo: null };
+var friends = [];
+var chats = [];
+var activeId = null, curTab = 'f', nextId = 1, selected = [], renamingId = null;
 
-function getTime(){var now=new Date(),h=now.getHours(),m=String(now.getMinutes()).padStart(2,'0');return(h<12?'오전':'오후')+' '+(h%12||12)+':'+m;}
-var UF_SVG='<svg width="55%" height="40%" viewBox="0 0 280 160" style="display:block;margin:auto;"><path d="M52 52 Q80 24 108 44" fill="none" stroke="#C84828" stroke-width="14" stroke-linecap="round"/><path d="M172 44 Q200 24 228 52" fill="none" stroke="#C84828" stroke-width="14" stroke-linecap="round"/><path d="M48 92 Q140 136 232 92" fill="none" stroke="#C84828" stroke-width="14" stroke-linecap="round"/></svg>';
+var UF_SVG = '<svg width="55%" height="40%" viewBox="0 0 280 160" style="display:block;margin:auto;"><path d="M52 52 Q80 24 108 44" fill="none" stroke="#C84828" stroke-width="14" stroke-linecap="round"/><path d="M172 44 Q200 24 228 52" fill="none" stroke="#C84828" stroke-width="14" stroke-linecap="round"/><path d="M48 92 Q140 136 232 92" fill="none" stroke="#C84828" stroke-width="14" stroke-linecap="round"/></svg>';
 
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function ufAv(sz,rad,photo){sz=sz||40;rad=rad||'12px';var b='width:'+sz+'px;height:'+sz+'px;border-radius:'+rad+';flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;';if(photo)return '<div style="'+b+'"><img src="'+photo+'" style="width:100%;height:100%;object-fit:cover;"/></div>';return '<div style="'+b+'background:#fff;border:0.5px solid rgba(100,160,210,0.4);">'+UF_SVG+'</div>';}
 function groupAv(sz,rad){sz=sz||40;rad=rad||'12px';return '<div style="width:'+sz+'px;height:'+sz+'px;border-radius:'+rad+';background:rgba(200,228,245,0.7);border:0.5px solid rgba(100,160,210,0.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-users" style="font-size:'+Math.round(sz*0.45)+'px;color:#5A8AAA;"></i></div>';}
 function chatAv(c,sz,rad){return c.avatarType==='group'?groupAv(sz,rad):ufAv(sz,rad,null);}
 function updateBottomAv(){var el=document.getElementById('bottom-av');if(!el)return;el.innerHTML=me.photo?'<img src="'+me.photo+'" style="width:100%;height:100%;object-fit:cover;"/>':UF_SVG;}
 
-document.addEventListener('click',function(e){var m=document.getElementById('more-menu'),b=document.getElementById('more-btn');if(m&&b&&!m.contains(e.target)&&!b.contains(e.target))m.classList.remove('open');});
-function toggleMoreMenu(){var m=document.getElementById('more-menu');if(m)m.classList.toggle('open');}
+// --- 로그인 ---
+document.addEventListener('DOMContentLoaded', function() {
+  var loginInput = document.getElementById('login-name-input');
+  if (loginInput) loginInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') doLogin(); });
+});
 
-function switchTab(t){curTab=t;activeId=null;document.getElementById('tab-f').className='tab-btn'+(t==='f'?' active':'');document.getElementById('tab-c').className='tab-btn'+(t==='c'?' active':'');renderList();showEmpty();}
-function showEmpty(){document.getElementById('main').innerHTML='<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#aaa;font-size:13px;"><svg width="64" height="46" viewBox="0 0 280 160"><path d="M52 52 Q80 24 108 44" fill="none" stroke="#C84828" stroke-width="8" stroke-linecap="round" opacity="0.2"/><path d="M172 44 Q200 24 228 52" fill="none" stroke="#C84828" stroke-width="8" stroke-linecap="round" opacity="0.2"/><path d="M48 92 Q140 136 232 92" fill="none" stroke="#C84828" stroke-width="8" stroke-linecap="round" opacity="0.2"/></svg><span>'+(curTab==='f'?'친구를 눌러보세요':'대화방을 선택해 보세요')+'</span></div>';}
+function doLogin() {
+  var input = document.getElementById('login-name-input');
+  var name = input.value.trim();
+  if (!name) { input.focus(); return; }
 
-function renderList(){
-  var area=document.getElementById('list-area'),html='';
-  if(curTab==='f'){
-    friends.slice().sort(function(a,b){return b.online-a.online;}).forEach(function(f){html+='<div class="item'+(activeId===f.id?' active':'')+'" onclick="showProfile('+f.id+')">'+ufAv(40,'12px',f.photo)+'<div class="info"><div class="nm">'+f.name+'</div><div class="st"><span class="'+(f.online?'dot-on':'dot-off')+'"></span>'+f.status+'</div></div></div>';});
+  me.name = name;
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('my-name-bar').textContent = name;
+  document.getElementById('my-status-bar').textContent = me.status;
+
+  socket = io();
+
+  socket.on('users_updated', function(onlineUsers) {
+    var colorMap = {};
+    friends.forEach(function(f) { colorMap[f.name] = f.color; });
+    friends = onlineUsers
+      .filter(function(n) { return n !== me.name; })
+      .map(function(n, i) {
+        return { name: n, color: colorMap[n] || CLR[i % CLR.length], photo: null };
+      });
+    renderList();
+  });
+
+  socket.on('room_list', function(roomList) {
+    roomList.forEach(function(r) {
+      if (chats.find(function(c) { return c.roomId === r.roomId; })) return;
+      var memberNames = r.members.filter(function(n) { return n !== me.name; });
+      chats.push(makeChat(r.roomId, r.type, r.type === 'dm' ? (memberNames[0] || '알 수 없음') : r.name, memberNames, r.messages));
+    });
+    renderList();
+  });
+
+  socket.on('room_created', function(data) {
+    var existing = chats.find(function(c) { return c.roomId === data.roomId; });
+    if (existing) {
+      switchToChat(existing);
+      return;
+    }
+    var memberNames = data.members.filter(function(n) { return n !== me.name; });
+    var nc = makeChat(data.roomId, data.type, data.roomName, memberNames, data.messages || []);
+    chats.unshift(nc);
+    switchToChat(nc);
+  });
+
+  socket.on('room_invited', function(data) {
+    if (chats.find(function(c) { return c.roomId === data.roomId; })) return;
+    var memberNames = data.members.filter(function(n) { return n !== me.name; });
+    var nc = makeChat(data.roomId, data.type, data.roomName, memberNames, data.messages || []);
+    nc.unread = 1;
+    chats.unshift(nc);
+    renderList();
+  });
+
+  socket.on('message_received', function(data) {
+    var c = chats.find(function(ch) { return ch.roomId === data.roomId; });
+    if (!c) return;
+    c.messages.push({ s: data.sender === me.name ? 'me' : data.sender, t: data.text, time: data.time });
+    if (activeId === c.id) {
+      renderChat(c);
+    } else {
+      c.unread = (c.unread || 0) + 1;
+      renderList();
+    }
+  });
+
+  socket.emit('login', name);
+  updateBottomAv();
+  renderList();
+}
+
+function makeChat(roomId, type, name, memberNames, rawMessages) {
+  return {
+    id: nextId++,
+    roomId: roomId,
+    type: type,
+    name: name,
+    friendName: type === 'dm' ? name : null,
+    avatarType: type === 'dm' ? 'uf' : 'group',
+    color: CLR[chats.length % CLR.length],
+    members: memberNames,
+    unread: 0,
+    messages: rawMessages.map(function(m) {
+      return { s: m.sender === me.name ? 'me' : m.sender, t: m.text, time: m.time };
+    })
+  };
+}
+
+function switchToChat(c) {
+  curTab = 'c';
+  activeId = c.id;
+  c.unread = 0;
+  document.getElementById('tab-f').className = 'tab-btn';
+  document.getElementById('tab-c').className = 'tab-btn active';
+  renderList();
+  renderChat(c);
+}
+
+// --- 탭 / 네비게이션 ---
+document.addEventListener('click', function(e) {
+  var m = document.getElementById('more-menu'), b = document.getElementById('more-btn');
+  if (m && b && !m.contains(e.target) && !b.contains(e.target)) m.classList.remove('open');
+});
+function toggleMoreMenu() { var m = document.getElementById('more-menu'); if (m) m.classList.toggle('open'); }
+
+function switchTab(t) {
+  curTab = t; activeId = null;
+  document.getElementById('tab-f').className = 'tab-btn' + (t === 'f' ? ' active' : '');
+  document.getElementById('tab-c').className = 'tab-btn' + (t === 'c' ? ' active' : '');
+  renderList(); showEmpty();
+}
+
+function showEmpty() {
+  document.getElementById('main').innerHTML = '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#aaa;font-size:13px;"><svg width="64" height="46" viewBox="0 0 280 160"><path d="M52 52 Q80 24 108 44" fill="none" stroke="#C84828" stroke-width="8" stroke-linecap="round" opacity="0.2"/><path d="M172 44 Q200 24 228 52" fill="none" stroke="#C84828" stroke-width="8" stroke-linecap="round" opacity="0.2"/><path d="M48 92 Q140 136 232 92" fill="none" stroke="#C84828" stroke-width="8" stroke-linecap="round" opacity="0.2"/></svg><span>' + (curTab === 'f' ? '친구를 눌러보세요' : '대화방을 선택해 보세요') + '</span></div>';
+}
+
+function renderList() {
+  var area = document.getElementById('list-area');
+  if (!area) return;
+  var html = '';
+  if (curTab === 'f') {
+    if (friends.length === 0) {
+      html = '<div style="padding:32px 16px;text-align:center;color:#7AAAC0;font-size:12px;">아직 접속한 친구가 없어요<br/>친구에게 링크를 공유해보세요 👋</div>';
+    } else {
+      friends.forEach(function(f, i) {
+        html += '<div class="item' + (activeId === i ? ' active' : '') + '" onclick="showProfile(' + i + ')">' + ufAv(40, '12px', f.photo) + '<div class="info"><div class="nm">' + esc(f.name) + '</div><div class="st"><span class="dot-on"></span>온라인</div></div></div>';
+      });
+    }
   } else {
-    html+='<div class="new-group-btn" onclick="showNewGroup()"><div class="plus-av"><i class="ti ti-users-plus"></i></div><div class="info"><div class="nm" style="color:#C84828">새 단체 대화 만들기</div><div class="pr">친구들을 초대해보세요</div></div></div>';
-    chats.forEach(function(c){var last=c.messages[c.messages.length-1],preview='';if(last){if(last.s==='sys')preview='';else if(last.s==='me')preview='나: '+last.t;else if(c.type==='group')preview=last.s+': '+last.t;else preview=last.t;}html+='<div class="item'+(activeId===c.id?' active':'')+'" onclick="openChat('+c.id+')">'+chatAv(c,40,'12px')+'<div class="info"><div class="nm">'+c.name+(c.type==='group'?' ('+c.members.length+')':'')+'</div><div class="pr">'+preview+'</div></div><div class="meta"><span class="tm">'+(last?last.time:'')+'</span>'+(c.unread>0?'<span class="badge">'+c.unread+'</span>':'')+'</div></div>';});
+    html += '<div class="new-group-btn" onclick="showNewGroup()"><div class="plus-av"><i class="ti ti-users-plus"></i></div><div class="info"><div class="nm" style="color:#C84828">새 단체 대화 만들기</div><div class="pr">친구들을 초대해보세요</div></div></div>';
+    chats.forEach(function(c) {
+      var last = c.messages[c.messages.length - 1], preview = '';
+      if (last) {
+        if (last.s === 'me') preview = '나: ' + last.t;
+        else if (c.type === 'group') preview = last.s + ': ' + last.t;
+        else preview = last.t;
+      }
+      html += '<div class="item' + (activeId === c.id ? ' active' : '') + '" onclick="openChat(' + c.id + ')">' + chatAv(c, 40, '12px') + '<div class="info"><div class="nm">' + esc(c.name) + (c.type === 'group' ? ' (' + (c.members.length + 1) + ')' : '') + '</div><div class="pr">' + esc(preview) + '</div></div><div class="meta"><span class="tm">' + (last ? last.time : '') + '</span>' + (c.unread > 0 ? '<span class="badge">' + c.unread + '</span>' : '') + '</div></div>';
+    });
   }
-  area.innerHTML=html;
+  area.innerHTML = html;
 }
 
-function showNewGroup(){selected=[];var html='<div style="display:flex;flex-direction:column;height:100%;"><div style="padding:14px 16px;border-bottom:0.5px solid #eee;display:flex;align-items:center;gap:10px;background:#fff;"><button class="ib" onclick="switchTab(\'c\')"><i class="ti ti-arrow-left"></i></button><div style="flex:1;font-size:14px;font-weight:500;color:#222;">단체 대화 만들기</div></div><div style="padding:12px 16px;border-bottom:0.5px solid #eee;background:#fff;"><input id="grp-name" type="text" placeholder="대화방 이름 입력 (선택)" style="width:100%;padding:8px 12px;border:0.5px solid #ddd;border-radius:8px;font-size:13px;font-family:inherit;background:#f5f5f5;color:#222;outline:none;"/></div><div style="padding:10px 16px 6px;font-size:11px;color:#5A8AAA;background:linear-gradient(180deg,#EAF4FF,#D4E9F7);">초대할 친구 선택</div><div style="flex:1;overflow-y:auto;background:linear-gradient(180deg,#EAF4FF,#D4E9F7);">';friends.forEach(function(f){html+='<div class="chk-item" onclick="toggleSelect('+f.id+')" id="chk-'+f.id+'">'+ufAv(36,'10px',f.photo)+'<div class="info"><div class="nm">'+f.name+'</div><div class="st"><span class="'+(f.online?'dot-on':'dot-off')+'"></span>'+f.status+'</div></div><div class="chk-box" id="chkbox-'+f.id+'"></div></div>';});html+='</div><div style="padding:12px 16px;border-top:0.5px solid #eee;background:#fff;"><button class="action-btn" id="make-btn" onclick="makeGroup()" disabled>대화방 만들기</button></div></div>';document.getElementById('main').innerHTML=html;}
-function toggleSelect(fid){var idx=selected.indexOf(fid);if(idx>=0)selected.splice(idx,1);else selected.push(fid);var box=document.getElementById('chkbox-'+fid);if(box)box.className='chk-box'+(selected.indexOf(fid)>=0?' on':'');var btn=document.getElementById('make-btn');if(btn)btn.disabled=selected.length<1;}
-function makeGroup(){var nameEl=document.getElementById('grp-name'),roomName=nameEl&&nameEl.value.trim();if(!roomName){var sel=selected.map(function(id){var f=friends.find(function(x){return x.id===id;});return f?f.name:'';});roomName=sel.join(', ')+' 대화방';}var members=selected.map(function(id){var f=friends.find(function(x){return x.id===id;});return f?f.name:'';});var nc={id:nextId++,type:'group',name:roomName,friendName:null,avatarType:'group',color:CLR[chats.length%CLR.length],members:members,unread:0,messages:[]};chats.unshift(nc);curTab='c';activeId=nc.id;document.getElementById('tab-f').className='tab-btn';document.getElementById('tab-c').className='tab-btn active';renderList();renderChat(nc);}
-
-function showProfile(fid){var f=friends.find(function(x){return x.id===fid;});activeId=fid;renderList();var existing=chats.find(function(c){return c.type==='dm'&&c.friendName===f.name;});var lastMsg=existing&&existing.messages.length>0?existing.messages[existing.messages.length-1]:null;document.getElementById('main').innerHTML='<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;">'+ufAv(90,'24px',f.photo)+'<div style="margin-top:16px;font-size:20px;font-weight:500;color:#222;">'+f.name+'</div><div style="margin-top:8px;font-size:13px;color:#666;display:flex;align-items:center;gap:6px;"><span class="'+(f.online?'dot-on':'dot-off')+'"></span><span>'+f.status+'</span></div><div style="width:100%;height:0.5px;background:#eee;margin:24px 0;"></div>'+(lastMsg?'<div style="width:100%;background:#f5f5f5;border-radius:10px;padding:12px 16px;margin-bottom:20px;"><div style="font-size:11px;color:#aaa;margin-bottom:6px;">마지막 대화 · '+(existing?existing.name:'')+'</div><div style="font-size:13px;color:#222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(lastMsg.s==='me'?'나: ':f.name+': ')+lastMsg.t+'</div><div style="font-size:11px;color:#aaa;margin-top:4px;">'+lastMsg.time+'</div></div>':'')+'<button onclick="startDM('+f.id+')" style="width:100%;padding:12px;background:#C84828;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;"><i class="ti ti-message-2" style="font-size:16px;"></i> 1:1 대화하기</button></div>';}
-
-function showMyProfile(){activeId=null;renderList();var avHtml=me.photo?'<img src="'+me.photo+'" style="width:100%;height:100%;object-fit:cover;"/>':UF_SVG;document.getElementById('main').innerHTML='<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;"><div class="photo-wrap" onclick="triggerPhotoUpload()"><div style="width:90px;height:90px;border-radius:24px;overflow:hidden;background:#fff;border:0.5px solid #ddd;display:flex;align-items:center;justify-content:center;" id="profile-photo-preview">'+avHtml+'</div><div class="photo-overlay"><i class="ti ti-camera" style="font-size:13px;"></i><span>사진 변경</span></div></div><div style="margin-top:16px;font-size:20px;font-weight:500;color:#222;">'+me.name+'</div><div style="width:100%;height:0.5px;background:#eee;margin:24px 0;"></div><div style="width:100%;margin-bottom:12px;"><div style="font-size:11px;color:#aaa;margin-bottom:6px;">이름</div><input id="my-name" type="text" value="'+me.name+'" style="width:100%;padding:9px 12px;border:0.5px solid #ddd;border-radius:8px;font-size:13px;font-family:inherit;background:#f5f5f5;color:#222;outline:none;"/></div><div style="width:100%;margin-bottom:20px;"><div style="font-size:11px;color:#aaa;margin-bottom:6px;">상태 메시지</div><input id="my-status" type="text" value="'+me.status+'" style="width:100%;padding:9px 12px;border:0.5px solid #ddd;border-radius:8px;font-size:13px;font-family:inherit;background:#f5f5f5;color:#222;outline:none;"/></div><button onclick="saveMyProfile()" style="width:100%;padding:12px;background:#C84828;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer;">저장하기</button></div>';}
-
-function triggerPhotoUpload(){document.getElementById('photo-input').click();}
-document.getElementById('photo-input').addEventListener('change',function(e){var file=e.target.files[0];if(!file)return;var reader=new FileReader();reader.onload=function(ev){me.photo=ev.target.result;var p=document.getElementById('profile-photo-preview');if(p)p.innerHTML='<img src="'+me.photo+'" style="width:100%;height:100%;object-fit:cover;"/>';updateBottomAv();};reader.readAsDataURL(file);this.value='';});
-function saveMyProfile(){var n=document.getElementById('my-name'),s=document.getElementById('my-status');if(n)me.name=n.value.trim()||'나';if(s)me.status=s.value.trim();document.getElementById('my-name-bar').textContent=me.name;document.getElementById('my-status-bar').textContent=me.status||'상태 메시지 설정하기';updateBottomAv();showEmpty();}
-function startDM(fid){var f=friends.find(function(x){return x.id===fid;});var existing=chats.find(function(c){return c.type==='dm'&&c.friendName===f.name;});if(!existing){var nc={id:nextId++,type:'dm',name:f.name,friendName:f.name,avatarType:'uf',color:f.color,members:[f.name],unread:0,messages:[]};chats.unshift(nc);existing=nc;}curTab='c';activeId=existing.id;existing.unread=0;document.getElementById('tab-f').className='tab-btn';document.getElementById('tab-c').className='tab-btn active';renderList();renderChat(existing);}
-function openChat(id){var c=chats.find(function(x){return x.id===id;});if(!c)return;activeId=id;c.unread=0;renderList();renderChat(c);}
-function startRename(cid){renamingId=cid;var c=chats.find(function(x){return x.id===cid;});var menu=document.getElementById('more-menu');if(menu)menu.classList.remove('open');var bar=document.getElementById('rename-bar');if(bar){bar.style.display='flex';var inp=document.getElementById('rename-inp');if(inp){inp.value=c.name;inp.focus();inp.select();}}}
-function confirmRename(){var inp=document.getElementById('rename-inp'),newName=inp&&inp.value.trim();if(!newName||!renamingId)return;var c=chats.find(function(x){return x.id===renamingId;});if(c)c.name=newName;renamingId=null;var bar=document.getElementById('rename-bar');if(bar)bar.style.display='none';var hn=document.getElementById('chat-hn');if(hn)hn.textContent=newName;renderList();}
-function leaveChat(cid){var menu=document.getElementById('more-menu');if(menu)menu.classList.remove('open');var idx=chats.findIndex(function(x){return x.id===cid;});if(idx>=0)chats.splice(idx,1);activeId=null;curTab='c';renderList();showEmpty();}
-
-function renderChat(c){
-  var msgsHtml='';
-  if(c.messages.length===0){msgsHtml='<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#aaa;">'+chatAv(c,48,'14px')+'<span style="font-size:13px;font-weight:500;color:#222;margin-top:4px">'+c.name+'</span><span style="font-size:12px">첫 메시지를 보내보세요 👋</span></div>';}
-  else{c.messages.forEach(function(msg){if(msg.s==='sys'){msgsHtml+='<div class="dv">'+msg.t+'</div>';return;}var isMe=msg.s==='me';var mavHtml=isMe?'':`<div class="mav" style="background:#fff;border:0.5px solid rgba(100,160,210,0.4);">${UF_SVG}</div>`;msgsHtml+='<div class="mr'+(isMe?' me':'')+'">'+mavHtml+'<div class="mc">'+(!isMe?'<span class="sn">'+msg.s+'</span>':'')+'<div class="bl">'+msg.t+'</div><span class="mt">'+msg.time+'</span></div></div>';});}
-  document.getElementById('main').innerHTML=
-    '<div style="padding:14px 16px;border-bottom:0.5px solid #eee;display:flex;align-items:center;gap:10px;background:#fff;">'+chatAv(c,34,'10px')
-    +'<div style="flex:1"><div id="chat-hn" style="font-size:14px;font-weight:500;color:#222;">'+c.name+'</div><div style="font-size:11px;color:#888;margin-top:1px;">'+(c.type==='group'?c.members.length+'명 참여 중':'1:1 대화')+'</div></div>'
-    +'<button class="ib tooltip" data-tip="대화방 이름 변경" onclick="startRename('+c.id+')"><i class="ti ti-pencil"></i></button>'
-    +'<div class="dropdown"><button class="ib tooltip" id="more-btn" data-tip="더보기" onclick="toggleMoreMenu()"><i class="ti ti-dots-vertical"></i></button>'
-    +'<div class="dropdown-menu" id="more-menu">'+(c.type==='group'?'<div class="dropdown-item" onclick="alert(\'준비 중!\')"><i class="ti ti-users" style="color:#5A8AAA;"></i>멤버 보기</div>':'')
-    +'<div class="dropdown-item" onclick="alert(\'준비 중!\')"><i class="ti ti-bell" style="color:#5A8AAA;"></i>알림 설정</div>'
-    +'<div class="dropdown-divider"></div><div class="dropdown-item danger" onclick="leaveChat('+c.id+')"><i class="ti ti-door-exit"></i>대화방 나가기</div></div></div></div>'
-    +'<div class="rename-bar" id="rename-bar" style="display:none;"><input id="rename-inp" type="text" placeholder="새 대화방 이름"/><button onclick="confirmRename()">변경</button><button onclick="document.getElementById(\'rename-bar\').style.display=\'none\'" style="padding:7px 10px;border:0.5px solid #ddd;background:transparent;border-radius:8px;font-size:12px;cursor:pointer;color:#888;">취소</button></div>'
-    +'<div id="msgs">'+msgsHtml+'</div>'
-    +'<div id="inp-area"><button class="ib"><i class="ti ti-plus"></i></button><input id="msg-in" type="text" placeholder="'+c.name+'에게 메시지 보내기"/><button id="send-btn" onclick="sendMsg()"><i class="ti ti-send"></i></button></div>';
-  var msgs=document.getElementById('msgs');if(msgs)msgs.scrollTop=msgs.scrollHeight;
-  var inp=document.getElementById('msg-in');if(inp)inp.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}});
-  var ri=document.getElementById('rename-inp');if(ri)ri.addEventListener('keydown',function(e){if(e.key==='Enter')confirmRename();});
+// --- 단체 대화 ---
+function showNewGroup() {
+  selected = [];
+  var html = '<div style="display:flex;flex-direction:column;height:100%;"><div style="padding:14px 16px;border-bottom:0.5px solid #eee;display:flex;align-items:center;gap:10px;background:#fff;"><button class="ib" onclick="switchTab(\'c\')"><i class="ti ti-arrow-left"></i></button><div style="flex:1;font-size:14px;font-weight:500;color:#222;">단체 대화 만들기</div></div><div style="padding:12px 16px;border-bottom:0.5px solid #eee;background:#fff;"><input id="grp-name" type="text" placeholder="대화방 이름 입력 (선택)" style="width:100%;padding:8px 12px;border:0.5px solid #ddd;border-radius:8px;font-size:13px;font-family:inherit;background:#f5f5f5;color:#222;outline:none;"/></div>';
+  if (friends.length === 0) {
+    html += '<div style="flex:1;display:flex;align-items:center;justify-content:center;font-size:12px;color:#aaa;">접속한 친구가 없어요</div>';
+  } else {
+    html += '<div style="padding:10px 16px 6px;font-size:11px;color:#5A8AAA;background:linear-gradient(180deg,#EAF4FF,#D4E9F7);">초대할 친구 선택</div><div style="flex:1;overflow-y:auto;background:linear-gradient(180deg,#EAF4FF,#D4E9F7);">';
+    friends.forEach(function(f, i) {
+      html += '<div class="chk-item" onclick="toggleSelect(' + i + ')" id="chk-' + i + '">' + ufAv(36, '10px', f.photo) + '<div class="info"><div class="nm">' + esc(f.name) + '</div><div class="st"><span class="dot-on"></span>온라인</div></div><div class="chk-box" id="chkbox-' + i + '"></div></div>';
+    });
+    html += '</div>';
+  }
+  html += '<div style="padding:12px 16px;border-top:0.5px solid #eee;background:#fff;"><button class="action-btn" id="make-btn" onclick="makeGroup()" disabled>대화방 만들기</button></div></div>';
+  document.getElementById('main').innerHTML = html;
 }
-function sendMsg(){var c=chats.find(function(x){return x.id===activeId;});var inp=document.getElementById('msg-in');if(!inp||!c)return;var text=inp.value.trim();if(!text)return;c.messages.push({s:'me',t:text,time:getTime()});inp.value='';renderChat(c);renderList();}
 
-updateBottomAv();
-renderList();
+function toggleSelect(i) {
+  var idx = selected.indexOf(i);
+  if (idx >= 0) selected.splice(idx, 1); else selected.push(i);
+  var box = document.getElementById('chkbox-' + i);
+  if (box) box.className = 'chk-box' + (selected.indexOf(i) >= 0 ? ' on' : '');
+  var btn = document.getElementById('make-btn');
+  if (btn) btn.disabled = selected.length < 1;
+}
+
+function makeGroup() {
+  var nameEl = document.getElementById('grp-name');
+  var roomName = nameEl ? nameEl.value.trim() : '';
+  var memberNames = selected.map(function(i) { return friends[i].name; });
+  socket.emit('create_group', { name: roomName, memberNames: memberNames });
+}
+
+// --- 프로필 / DM ---
+function showProfile(idx) {
+  var f = friends[idx];
+  if (!f) return;
+  activeId = idx;
+  renderList();
+  var existing = chats.find(function(c) { return c.type === 'dm' && c.friendName === f.name; });
+  var lastMsg = existing && existing.messages.length > 0 ? existing.messages[existing.messages.length - 1] : null;
+  document.getElementById('main').innerHTML =
+    '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;">'
+    + ufAv(90, '24px', f.photo)
+    + '<div style="margin-top:16px;font-size:20px;font-weight:500;color:#222;">' + esc(f.name) + '</div>'
+    + '<div style="margin-top:8px;font-size:13px;color:#666;display:flex;align-items:center;gap:6px;"><span class="dot-on"></span><span>온라인</span></div>'
+    + '<div style="width:100%;height:0.5px;background:#eee;margin:24px 0;"></div>'
+    + (lastMsg ? '<div style="width:100%;background:#f5f5f5;border-radius:10px;padding:12px 16px;margin-bottom:20px;"><div style="font-size:11px;color:#aaa;margin-bottom:6px;">마지막 대화</div><div style="font-size:13px;color:#222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (lastMsg.s === 'me' ? '나: ' : esc(f.name) + ': ') + esc(lastMsg.t) + '</div><div style="font-size:11px;color:#aaa;margin-top:4px;">' + lastMsg.time + '</div></div>' : '')
+    + '<button onclick="startDM(' + idx + ')" style="width:100%;padding:12px;background:#C84828;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;"><i class="ti ti-message-2" style="font-size:16px;"></i> 1:1 대화하기</button></div>';
+}
+
+function showMyProfile() {
+  activeId = null;
+  renderList();
+  var avHtml = me.photo ? '<img src="' + me.photo + '" style="width:100%;height:100%;object-fit:cover;"/>' : UF_SVG;
+  document.getElementById('main').innerHTML =
+    '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;">'
+    + '<div class="photo-wrap" onclick="triggerPhotoUpload()"><div style="width:90px;height:90px;border-radius:24px;overflow:hidden;background:#fff;border:0.5px solid #ddd;display:flex;align-items:center;justify-content:center;" id="profile-photo-preview">' + avHtml + '</div><div class="photo-overlay"><i class="ti ti-camera" style="font-size:13px;"></i><span>사진 변경</span></div></div>'
+    + '<div style="margin-top:16px;font-size:20px;font-weight:500;color:#222;">' + esc(me.name) + '</div>'
+    + '<div style="width:100%;height:0.5px;background:#eee;margin:24px 0;"></div>'
+    + '<div style="width:100%;margin-bottom:12px;"><div style="font-size:11px;color:#aaa;margin-bottom:6px;">이름</div><input id="my-name" type="text" value="' + esc(me.name) + '" style="width:100%;padding:9px 12px;border:0.5px solid #ddd;border-radius:8px;font-size:13px;font-family:inherit;background:#f5f5f5;color:#222;outline:none;"/></div>'
+    + '<div style="width:100%;margin-bottom:20px;"><div style="font-size:11px;color:#aaa;margin-bottom:6px;">상태 메시지</div><input id="my-status" type="text" value="' + esc(me.status) + '" style="width:100%;padding:9px 12px;border:0.5px solid #ddd;border-radius:8px;font-size:13px;font-family:inherit;background:#f5f5f5;color:#222;outline:none;"/></div>'
+    + '<button onclick="saveMyProfile()" style="width:100%;padding:12px;background:#C84828;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer;">저장하기</button></div>';
+}
+
+function triggerPhotoUpload() { document.getElementById('photo-input').click(); }
+document.getElementById('photo-input').addEventListener('change', function(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    me.photo = ev.target.result;
+    var p = document.getElementById('profile-photo-preview');
+    if (p) p.innerHTML = '<img src="' + me.photo + '" style="width:100%;height:100%;object-fit:cover;"/>';
+    updateBottomAv();
+  };
+  reader.readAsDataURL(file);
+  this.value = '';
+});
+
+function saveMyProfile() {
+  var n = document.getElementById('my-name'), s = document.getElementById('my-status');
+  if (n) me.name = n.value.trim() || me.name;
+  if (s) me.status = s.value.trim();
+  document.getElementById('my-name-bar').textContent = me.name;
+  document.getElementById('my-status-bar').textContent = me.status || '상태 메시지 설정하기';
+  updateBottomAv();
+  showEmpty();
+}
+
+function startDM(idx) {
+  var f = friends[idx];
+  if (!f || !socket) return;
+  var roomId = 'dm:' + [me.name, f.name].sort().join('___');
+  var existing = chats.find(function(c) { return c.roomId === roomId; });
+  if (existing) { switchToChat(existing); return; }
+  socket.emit('create_dm', { targetName: f.name });
+}
+
+function openChat(id) {
+  var c = chats.find(function(x) { return x.id === id; });
+  if (!c) return;
+  activeId = id;
+  c.unread = 0;
+  renderList();
+  renderChat(c);
+}
+
+function startRename(cid) {
+  renamingId = cid;
+  var c = chats.find(function(x) { return x.id === cid; });
+  var menu = document.getElementById('more-menu');
+  if (menu) menu.classList.remove('open');
+  var bar = document.getElementById('rename-bar');
+  if (bar) {
+    bar.style.display = 'flex';
+    var inp = document.getElementById('rename-inp');
+    if (inp) { inp.value = c.name; inp.focus(); inp.select(); }
+  }
+}
+
+function confirmRename() {
+  var inp = document.getElementById('rename-inp'), newName = inp && inp.value.trim();
+  if (!newName || !renamingId) return;
+  var c = chats.find(function(x) { return x.id === renamingId; });
+  if (c) c.name = newName;
+  renamingId = null;
+  var bar = document.getElementById('rename-bar');
+  if (bar) bar.style.display = 'none';
+  var hn = document.getElementById('chat-hn');
+  if (hn) hn.textContent = newName;
+  renderList();
+}
+
+function leaveChat(cid) {
+  var menu = document.getElementById('more-menu');
+  if (menu) menu.classList.remove('open');
+  var idx = chats.findIndex(function(x) { return x.id === cid; });
+  if (idx >= 0) chats.splice(idx, 1);
+  activeId = null;
+  renderList();
+  showEmpty();
+}
+
+function renderChat(c) {
+  var msgsHtml = '';
+  if (c.messages.length === 0) {
+    msgsHtml = '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#aaa;">' + chatAv(c, 48, '14px') + '<span style="font-size:13px;font-weight:500;color:#222;margin-top:4px">' + esc(c.name) + '</span><span style="font-size:12px">첫 메시지를 보내보세요 👋</span></div>';
+  } else {
+    c.messages.forEach(function(msg) {
+      if (msg.s === 'sys') { msgsHtml += '<div class="dv">' + esc(msg.t) + '</div>'; return; }
+      var isMe = msg.s === 'me';
+      var mavHtml = isMe ? '' : '<div class="mav" style="background:#fff;border:0.5px solid rgba(100,160,210,0.4);">' + UF_SVG + '</div>';
+      msgsHtml += '<div class="mr' + (isMe ? ' me' : '') + '">' + mavHtml + '<div class="mc">' + (!isMe ? '<span class="sn">' + esc(msg.s) + '</span>' : '') + '<div class="bl">' + esc(msg.t) + '</div><span class="mt">' + msg.time + '</span></div></div>';
+    });
+  }
+  document.getElementById('main').innerHTML =
+    '<div style="padding:14px 16px;border-bottom:0.5px solid #eee;display:flex;align-items:center;gap:10px;background:#fff;">' + chatAv(c, 34, '10px')
+    + '<div style="flex:1"><div id="chat-hn" style="font-size:14px;font-weight:500;color:#222;">' + esc(c.name) + '</div><div style="font-size:11px;color:#888;margin-top:1px;">' + (c.type === 'group' ? (c.members.length + 1) + '명 참여 중' : '1:1 대화') + '</div></div>'
+    + '<button class="ib tooltip" data-tip="대화방 이름 변경" onclick="startRename(' + c.id + ')"><i class="ti ti-pencil"></i></button>'
+    + '<div class="dropdown"><button class="ib tooltip" id="more-btn" data-tip="더보기" onclick="toggleMoreMenu()"><i class="ti ti-dots-vertical"></i></button>'
+    + '<div class="dropdown-menu" id="more-menu">'
+    + '<div class="dropdown-item" onclick="alert(\'준비 중!\')"><i class="ti ti-bell" style="color:#5A8AAA;"></i>알림 설정</div>'
+    + '<div class="dropdown-divider"></div><div class="dropdown-item danger" onclick="leaveChat(' + c.id + ')"><i class="ti ti-door-exit"></i>대화방 나가기</div></div></div></div>'
+    + '<div class="rename-bar" id="rename-bar" style="display:none;"><input id="rename-inp" type="text" placeholder="새 대화방 이름"/><button onclick="confirmRename()">변경</button><button onclick="document.getElementById(\'rename-bar\').style.display=\'none\'" style="padding:7px 10px;border:0.5px solid #ddd;background:transparent;border-radius:8px;font-size:12px;cursor:pointer;color:#888;">취소</button></div>'
+    + '<div id="msgs">' + msgsHtml + '</div>'
+    + '<div id="inp-area"><button class="ib"><i class="ti ti-plus"></i></button><input id="msg-in" type="text" placeholder="' + esc(c.name) + '에게 메시지 보내기"/><button id="send-btn" onclick="sendMsg()"><i class="ti ti-send"></i></button></div>';
+  var msgs = document.getElementById('msgs');
+  if (msgs) msgs.scrollTop = msgs.scrollHeight;
+  var inp = document.getElementById('msg-in');
+  if (inp) inp.addEventListener('keydown', function(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); } });
+  var ri = document.getElementById('rename-inp');
+  if (ri) ri.addEventListener('keydown', function(e) { if (e.key === 'Enter') confirmRename(); });
+}
+
+function sendMsg() {
+  var c = chats.find(function(x) { return x.id === activeId; });
+  var inp = document.getElementById('msg-in');
+  if (!inp || !c || !socket) return;
+  var text = inp.value.trim();
+  if (!text) return;
+  socket.emit('send_message', { roomId: c.roomId, text: text });
+  inp.value = '';
+}
 </script>
 </body>
 </html>
