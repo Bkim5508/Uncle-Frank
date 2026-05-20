@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Uncle Frank</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
   <style>
@@ -84,12 +84,13 @@
       /* 로그인 화면 */
       #login-screen>div{width:90%!important;max-width:360px;}
       /* 앱 컨테이너: 좌우 분할 없애고 전체화면 단독 표시 */
+      /* bottom은 지정하지 않고 height로만 크기 제어 — JS(visualViewport)로 키보드 높이 반영 가능 */
       #app{
         display:block!important;
         position:fixed!important;
-        top:0!important;left:0!important;right:0!important;bottom:0!important;
+        top:0!important;left:0!important;right:0!important;
         width:100vw!important;max-width:100vw!important;
-        height:100vh!important;height:100dvh!important;
+        height:100vh;height:100dvh;
         border-radius:0!important;border:none!important;box-shadow:none!important;
         overflow:hidden!important;
       }
@@ -109,13 +110,20 @@
       /* 채팅방 열림: 사이드바 왼쪽으로 퇴장, 메인 등장 */
       #app.mobile-chat #sidebar{transform:translateX(-100%)!important;}
       #app.mobile-chat #main{transform:translateX(0)!important;}
+      /* 메시지 목록: flex 자식의 min-height:0 이 없으면 overflow 제한이 안 걸림 */
+      #msgs{flex:1!important;min-height:0!important;overflow-y:auto!important;}
+      /* 헤더·입력창: 압축되지 않도록 고정 */
+      #inp-area{
+        flex-shrink:0!important;
+        padding:10px 12px!important;
+        padding-bottom:max(10px,env(safe-area-inset-bottom))!important;
+      }
+      .rename-bar{flex-shrink:0!important;}
       /* 터치 친화적 크기 */
       .item,.new-group-btn,.chk-item{padding:12px 14px;min-height:60px;}
       .tab-btn{padding:12px 0;min-height:44px;font-size:13px;}
       .ib,#send-btn{width:44px;height:44px;font-size:20px;flex-shrink:0;}
       #msg-in{height:44px;font-size:15px;padding:8px 14px;}
-      /* 입력창: 키보드에 가리지 않도록 safe-area 패딩 */
-      #inp-area{padding:10px 12px;padding-bottom:max(10px,env(safe-area-inset-bottom));}
       #my-profile-bar{padding:14px;min-height:60px;}
       .nm{font-size:14px;}
       .pr,.st{font-size:12px;}
@@ -522,7 +530,7 @@ function renderChat(c) {
     });
   }
   document.getElementById('main').innerHTML =
-    '<div style="padding:14px 16px;border-bottom:0.5px solid #eee;display:flex;align-items:center;gap:10px;background:#fff;">'
+    '<div style="padding:14px 16px;border-bottom:0.5px solid #eee;display:flex;align-items:center;gap:10px;background:#fff;flex-shrink:0;">'
     + '<button class="ib mobile-back-btn" onclick="goBack()"><i class="ti ti-arrow-left"></i></button>'
     + chatAv(c, 34, '10px')
     + '<div style="flex:1"><div id="chat-hn" style="font-size:14px;font-weight:500;color:#222;">' + esc(c.name) + '</div><div style="font-size:11px;color:#888;margin-top:1px;">' + (c.type === 'group' ? (c.members.length + 1) + '명 참여 중' : '1:1 대화') + '</div></div>'
@@ -543,14 +551,21 @@ function renderChat(c) {
   enterMobileChat();
 }
 
-// 모바일 키보드 대응: visualViewport resize 시 앱 높이 조정
+// 모바일 키보드 대응: visualViewport resize 시 앱 높이를 가시 영역에 맞게 조정
+// (iOS Safari는 키보드가 올라와도 100dvh가 줄어들지 않아 JS로 보완)
 if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', function() {
-    if (window.innerWidth <= 768) {
-      var app = document.getElementById('app');
-      if (app) app.style.height = window.visualViewport.height + 'px';
-    }
-  });
+  function onViewportResize() {
+    if (window.innerWidth > 768) return;
+    var app = document.getElementById('app');
+    if (!app) return;
+    var h = window.visualViewport.height;
+    app.style.height = h + 'px';
+    // 키보드가 올라왔을 때 메시지 목록 하단 유지
+    var msgs = document.getElementById('msgs');
+    if (msgs) msgs.scrollTop = msgs.scrollHeight;
+  }
+  window.visualViewport.addEventListener('resize', onViewportResize);
+  window.visualViewport.addEventListener('scroll', onViewportResize);
 }
 
 function sendMsg() {
