@@ -198,32 +198,33 @@
 <script>
 var socket = null;
 var CLR = ['#A8E6CF','#FFD3B6','#D4A5D5','#85C1E9','#F9A7B0','#B8D4A8'];
-var me = { name: '', status: 'Uncle Frank 사용 중 😄', photo: null };
+var me = { name: '', status: 'Uncle Frank 사용 중 😄', photo: null, color: '#C84828' };
 var friends = [];
 var chats = [];
 var activeId = null, curTab = 'f', nextId = 1, selected = [], renamingId = null;
 var pendingProfiles = {}; // name -> { status, photo } — 친구 목록 로드 전 도착한 프로필 캐시
 
-var UF_SVG = '<svg width="55%" height="40%" viewBox="0 0 280 160" style="display:block;margin:auto;"><path d="M52 52 Q80 24 108 44" fill="none" stroke="#C84828" stroke-width="14" stroke-linecap="round"/><path d="M172 44 Q200 24 228 52" fill="none" stroke="#C84828" stroke-width="14" stroke-linecap="round"/><path d="M48 92 Q140 136 232 92" fill="none" stroke="#C84828" stroke-width="14" stroke-linecap="round"/></svg>';
+function ufSvg(c){c=c||'#C84828';return '<svg width="55%" height="40%" viewBox="0 0 280 160" style="display:block;margin:auto;"><path d="M52 52 Q80 24 108 44" fill="none" stroke="'+c+'" stroke-width="14" stroke-linecap="round"/><path d="M172 44 Q200 24 228 52" fill="none" stroke="'+c+'" stroke-width="14" stroke-linecap="round"/><path d="M48 92 Q140 136 232 92" fill="none" stroke="'+c+'" stroke-width="14" stroke-linecap="round"/></svg>';}
 
 function isMobile(){return window.innerWidth<=768;}
 function enterMobileChat(){if(isMobile())document.getElementById('app').classList.add('mobile-chat');}
 function goBack(){document.getElementById('app').classList.remove('mobile-chat');activeId=null;renderList();showEmpty();}
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function ufAv(sz,rad,photo){sz=sz||40;rad=rad||'12px';var b='width:'+sz+'px;height:'+sz+'px;border-radius:'+rad+';flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;';if(photo)return '<div style="'+b+'"><img src="'+photo+'" style="width:100%;height:100%;object-fit:cover;"/></div>';return '<div style="'+b+'background:#fff;border:0.5px solid rgba(100,160,210,0.4);">'+UF_SVG+'</div>';}
+function ufAv(sz,rad,photo,color){sz=sz||40;rad=rad||'12px';var b='width:'+sz+'px;height:'+sz+'px;border-radius:'+rad+';flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;';if(photo)return '<div style="'+b+'"><img src="'+photo+'" style="width:100%;height:100%;object-fit:cover;"/></div>';return '<div style="'+b+'background:#fff;border:0.5px solid rgba(100,160,210,0.4);">'+ufSvg(color)+'</div>';}
 function groupAv(sz,rad){sz=sz||40;rad=rad||'12px';return '<div style="width:'+sz+'px;height:'+sz+'px;border-radius:'+rad+';background:rgba(200,228,245,0.7);border:0.5px solid rgba(100,160,210,0.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-users" style="font-size:'+Math.round(sz*0.45)+'px;color:#5A8AAA;"></i></div>';}
 function chatAv(c,sz,rad){
   if(c.avatarType==='group') return groupAv(sz,rad);
   var f=friends.find(function(x){return x.name===c.friendName;});
-  return ufAv(sz,rad,f?f.photo:null);
+  return ufAv(sz,rad,f?f.photo:null,f?f.color:null);
 }
-function updateBottomAv(){var el=document.getElementById('bottom-av');if(!el)return;el.innerHTML=me.photo?'<img src="'+me.photo+'" style="width:100%;height:100%;object-fit:cover;"/>':UF_SVG;}
+function updateBottomAv(){var el=document.getElementById('bottom-av');if(!el)return;el.innerHTML=me.photo?'<img src="'+me.photo+'" style="width:100%;height:100%;object-fit:cover;"/>':ufSvg(me.color);}
+function updateSidebarLogo(){var s=document.querySelector('#logo-area svg');if(!s)return;var c=me.color||'#C84828';s.querySelectorAll('path').forEach(function(p){p.setAttribute('stroke',c);});var t=s.querySelector('text');if(t)t.setAttribute('fill',c);}
 
 // --- 로그인 ---
 document.addEventListener('DOMContentLoaded', function() {
   var loginInput = document.getElementById('login-name-input');
-  if (loginInput) loginInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') doLogin(); });
+  if (loginInput) loginInput.addEventListener('keydown', function(e) { if (e.isComposing || e.keyCode===229) return; if (e.key === 'Enter') doLogin(); });
 });
 
 function doLogin() {
@@ -239,6 +240,13 @@ function doLogin() {
 
   socket = io();
 
+  // 서버가 배정한 내 색상 수신 → 로고·아바타 즉시 반영
+  socket.on('my_profile', function(data) {
+    me.color = data.color;
+    updateSidebarLogo();
+    updateBottomAv();
+  });
+
   socket.on('users_updated', function(onlineUsers) {
     var prevMap = {};
     friends.forEach(function(f) { prevMap[f.name] = f; });
@@ -249,7 +257,7 @@ function doLogin() {
         var pending = pendingProfiles[n] || {};
         return {
           name: n,
-          color: prev.color || CLR[i % CLR.length],
+          color: prev.color || pending.color || null,
           photo: prev.photo || pending.photo || null,
           status: prev.status !== undefined ? prev.status : (pending.status || '')
         };
@@ -273,6 +281,7 @@ function doLogin() {
       if (f) {
         if (snapshot[name].photo !== undefined) f.photo = snapshot[name].photo;
         if (snapshot[name].status !== undefined) f.status = snapshot[name].status;
+        if (snapshot[name].color) f.color = snapshot[name].color;
       }
     });
     renderList();
@@ -280,11 +289,12 @@ function doLogin() {
 
   socket.on('profile_updated', function(data) {
     if (data.name === me.name) return;
-    pendingProfiles[data.name] = { photo: data.photo, status: data.status };
+    pendingProfiles[data.name] = { photo: data.photo, status: data.status, color: data.color };
     var f = friends.find(function(x) { return x.name === data.name; });
     if (f) {
       f.photo = data.photo;
       f.status = data.status;
+      if (data.color) f.color = data.color;
       renderList();
     }
     // 현재 열린 DM 채팅창이 이 친구와의 대화면 헤더 즉시 반영
@@ -292,7 +302,7 @@ function doLogin() {
       var c = chats.find(function(ch) { return ch.id === activeId; });
       if (c && c.type === 'dm' && c.friendName === data.name) {
         var avWrap = document.getElementById('chat-header-av');
-        if (avWrap) avWrap.innerHTML = ufAv(34, '10px', data.photo);
+        if (avWrap) avWrap.innerHTML = ufAv(34, '10px', data.photo, data.color);
         var stEl = document.getElementById('chat-partner-status');
         if (stEl) stEl.textContent = data.status || '1:1 대화';
       }
@@ -392,7 +402,7 @@ function renderList() {
       html = '<div style="padding:32px 16px;text-align:center;color:#7AAAC0;font-size:12px;">아직 접속한 친구가 없어요<br/>친구에게 링크를 공유해보세요 👋</div>';
     } else {
       friends.forEach(function(f, i) {
-        html += '<div class="item' + (activeId === i ? ' active' : '') + '" onclick="showProfile(' + i + ')">' + ufAv(40, '12px', f.photo) + '<div class="info"><div class="nm">' + esc(f.name) + '</div><div class="st"><span class="dot-on"></span>' + (f.status ? esc(f.status) : '온라인') + '</div></div></div>';
+        html += '<div class="item' + (activeId === i ? ' active' : '') + '" onclick="showProfile(' + i + ')">' + ufAv(40, '12px', f.photo, f.color) + '<div class="info"><div class="nm">' + esc(f.name) + '</div><div class="st"><span class="dot-on"></span>' + (f.status ? esc(f.status) : '온라인') + '</div></div></div>';
       });
     }
   } else {
@@ -419,7 +429,7 @@ function showNewGroup() {
   } else {
     html += '<div style="padding:10px 16px 6px;font-size:11px;color:#5A8AAA;background:linear-gradient(180deg,#EAF4FF,#D4E9F7);">초대할 친구 선택</div><div style="flex:1;overflow-y:auto;background:linear-gradient(180deg,#EAF4FF,#D4E9F7);">';
     friends.forEach(function(f, i) {
-      html += '<div class="chk-item" onclick="toggleSelect(' + i + ')" id="chk-' + i + '">' + ufAv(36, '10px', f.photo) + '<div class="info"><div class="nm">' + esc(f.name) + '</div><div class="st"><span class="dot-on"></span>온라인</div></div><div class="chk-box" id="chkbox-' + i + '"></div></div>';
+      html += '<div class="chk-item" onclick="toggleSelect(' + i + ')" id="chk-' + i + '">' + ufAv(36, '10px', f.photo, f.color) + '<div class="info"><div class="nm">' + esc(f.name) + '</div><div class="st"><span class="dot-on"></span>온라인</div></div><div class="chk-box" id="chkbox-' + i + '"></div></div>';
     });
     html += '</div>';
   }
@@ -456,7 +466,7 @@ function showProfile(idx) {
     '<div style="height:100%;display:flex;flex-direction:column;">'
     + '<div class="mobile-header"><button class="ib" onclick="goBack()"><i class="ti ti-arrow-left"></i></button><span style="font-size:14px;font-weight:500;color:#222;margin-left:6px;">' + esc(f.name) + '</span></div>'
     + '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;">'
-    + ufAv(90, '24px', f.photo)
+    + ufAv(90, '24px', f.photo, f.color)
     + '<div style="margin-top:16px;font-size:20px;font-weight:500;color:#222;">' + esc(f.name) + '</div>'
     + '<div style="margin-top:8px;font-size:13px;color:#666;display:flex;align-items:center;gap:6px;"><span class="dot-on"></span><span>' + (f.status ? esc(f.status) : '온라인') + '</span></div>'
     + '<div style="width:100%;height:0.5px;background:#eee;margin:24px 0;"></div>'
@@ -469,7 +479,7 @@ function showProfile(idx) {
 function showMyProfile() {
   activeId = null;
   renderList();
-  var avHtml = me.photo ? '<img src="' + me.photo + '" style="width:100%;height:100%;object-fit:cover;"/>' : UF_SVG;
+  var avHtml = me.photo ? '<img src="' + me.photo + '" style="width:100%;height:100%;object-fit:cover;"/>' : ufSvg(me.color);
   document.getElementById('main').innerHTML =
     '<div style="height:100%;display:flex;flex-direction:column;">'
     + '<div class="mobile-header"><button class="ib" onclick="goBack()"><i class="ti ti-arrow-left"></i></button><span style="font-size:14px;font-weight:500;color:#222;margin-left:6px;">내 프로필</span></div>'
@@ -607,7 +617,11 @@ function renderChat(c) {
     c.messages.forEach(function(msg) {
       if (msg.s === 'sys') { msgsHtml += '<div class="dv">' + esc(msg.t) + '</div>'; return; }
       var isMe = msg.s === 'me';
-      var mavHtml = isMe ? '' : '<div class="mav" style="background:#fff;border:0.5px solid rgba(100,160,210,0.4);">' + UF_SVG + '</div>';
+      var sf = isMe ? null : friends.find(function(x){return x.name===msg.s;});
+      var mavContent = isMe
+        ? (me.photo ? '<img src="'+me.photo+'" style="width:100%;height:100%;object-fit:cover;"/>' : ufSvg(me.color))
+        : ((sf&&sf.photo) ? '<img src="'+sf.photo+'" style="width:100%;height:100%;object-fit:cover;"/>' : ufSvg(sf?sf.color:null));
+      var mavHtml = '<div class="mav" style="background:#fff;border:0.5px solid rgba(100,160,210,0.4);">'+mavContent+'</div>';
       msgsHtml += '<div class="mr' + (isMe ? ' me' : '') + '">' + mavHtml + '<div class="mc">' + (!isMe ? '<span class="sn">' + esc(msg.s) + '</span>' : '') + '<div class="bl">' + esc(msg.t) + '</div><span class="mt">' + msg.time + '</span></div></div>';
     });
   }
@@ -629,9 +643,9 @@ function renderChat(c) {
   var msgs = document.getElementById('msgs');
   if (msgs) msgs.scrollTop = msgs.scrollHeight;
   var inp = document.getElementById('msg-in');
-  if (inp) inp.addEventListener('keydown', function(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); } });
+  if (inp) inp.addEventListener('keydown', function(e) { if (e.isComposing||e.keyCode===229) return; if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); } });
   var ri = document.getElementById('rename-inp');
-  if (ri) ri.addEventListener('keydown', function(e) { if (e.key === 'Enter') confirmRename(); });
+  if (ri) ri.addEventListener('keydown', function(e) { if (e.isComposing||e.keyCode===229) return; if (e.key === 'Enter') confirmRename(); });
   enterMobileChat();
 }
 

@@ -11,8 +11,9 @@ const nameToSocket = new Map(); // name -> socketId
 const socketToName = new Map(); // socketId -> name
 // roomId -> { name, type, members: Set<name>, messages: [{sender, text, time}] }
 const rooms = new Map();
-// name -> { status, photo }
+// name -> { status, photo, color }
 const profiles = new Map();
+const COLOR_PALETTE = ['#EF4444','#3B82F6','#22C55E','#A855F7','#F97316','#EC4899','#14B8A6','#6366F1'];
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'uncle-frank.html'));
@@ -46,9 +47,17 @@ io.on('connection', (socket) => {
     });
     if (userRooms.length > 0) socket.emit('room_list', userRooms);
 
-    // 기존 프로필 스냅샷 전송
+    // 첫 로그인 시 랜덤 색상 배정 (재접속 시 유지)
+    if (!profiles.has(name)) {
+      const color = COLOR_PALETTE[Math.floor(Math.random() * COLOR_PALETTE.length)];
+      profiles.set(name, { status: '', photo: null, color });
+    }
+    // 내 색상을 본인에게만 전송
+    socket.emit('my_profile', { color: profiles.get(name).color });
+
+    // 다른 사용자들의 프로필 스냅샷 전송
     const snapshot = {};
-    profiles.forEach((p, n) => { snapshot[n] = p; });
+    profiles.forEach((p, n) => { if (n !== name) snapshot[n] = p; });
     if (Object.keys(snapshot).length > 0) socket.emit('profiles_snapshot', snapshot);
 
     io.emit('users_updated', [...nameToSocket.keys()]);
@@ -105,8 +114,10 @@ io.on('connection', (socket) => {
     if (!name) return;
     const cleanStatus = typeof status === 'string' ? status.trim().slice(0, 100) : '';
     const cleanPhoto = typeof photo === 'string' && photo.startsWith('data:image/') ? photo : null;
-    profiles.set(name, { status: cleanStatus, photo: cleanPhoto });
-    io.emit('profile_updated', { name, status: cleanStatus, photo: cleanPhoto });
+    const existing = profiles.get(name) || {};
+    const color = existing.color || COLOR_PALETTE[0];
+    profiles.set(name, { status: cleanStatus, photo: cleanPhoto, color });
+    io.emit('profile_updated', { name, status: cleanStatus, photo: cleanPhoto, color });
   });
 
   socket.on('send_message', ({ roomId, text }) => {
