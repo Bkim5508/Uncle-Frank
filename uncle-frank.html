@@ -80,8 +80,8 @@
     .mobile-header{display:none;align-items:center;padding:10px 14px;border-bottom:0.5px solid #eee;background:#fff;flex-shrink:0;}
     /* =================== MOBILE =================== */
     @media screen and (max-width:768px){
-      /* iOS Safari: 키보드 등장 시 body 스크롤을 막아 position:fixed 요소가 밀리지 않게 함 */
-      html,body{overflow:hidden!important;position:fixed!important;width:100%!important;height:100%!important;}
+      /* overflow:hidden 으로 body 스크롤 억제 — position:fixed 는 iOS 사진 피커 후 페이지 리로드를 유발하므로 사용 안 함 */
+      html,body{overflow:hidden!important;height:100%!important;}
       body{align-items:flex-start;background:#fff;}
       /* 로그인 화면 */
       #login-screen>div{width:90%!important;max-width:360px;}
@@ -484,18 +484,47 @@ function showMyProfile() {
   enterMobileChat();
 }
 
+// 이미지를 Canvas로 리사이즈·압축 — 카메라 원본(수 MB)을 소켓 전송 가능한 크기로 줄임
+function compressImage(dataUrl, maxPx, quality, cb) {
+  try {
+    var img = new Image();
+    img.onload = function() {
+      try {
+        var w = img.width, h = img.height;
+        var scale = Math.min(maxPx / Math.max(w, h), 1); // 이미 작으면 축소 안 함
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        var result = canvas.toDataURL('image/jpeg', quality);
+        console.log('[photo] original:', Math.round(dataUrl.length/1024)+'KB → compressed:', Math.round(result.length/1024)+'KB');
+        cb(null, result);
+      } catch(e) { console.error('[compressImage]', e); cb(e); }
+    };
+    img.onerror = function(e) { console.error('[compressImage load]', e); cb(new Error('image load failed')); };
+    img.src = dataUrl;
+  } catch(e) { console.error('[compressImage outer]', e); cb(e); }
+}
+
 function triggerPhotoUpload() { document.getElementById('photo-input').click(); }
 document.getElementById('photo-input').addEventListener('change', function(e) {
   var file = e.target.files[0];
   if (!file) return;
+  console.log('[photo] selected:', file.name, Math.round(file.size/1024)+'KB', file.type);
   var reader = new FileReader();
   reader.onload = function(ev) {
-    me.photo = ev.target.result;
-    var p = document.getElementById('profile-photo-preview');
-    if (p) p.innerHTML = '<img src="' + me.photo + '" style="width:100%;height:100%;object-fit:cover;"/>';
-    updateBottomAv();
-    if (socket) socket.emit('update_profile', { status: me.status, photo: me.photo });
+    // 400px 이내, JPEG 0.78 압축 — 소켓 전송 안전 크기(~30KB)로 줄임
+    compressImage(ev.target.result, 400, 0.78, function(err, compressed) {
+      if (err) { console.error('[photo handler]', err); return; }
+      me.photo = compressed;
+      var p = document.getElementById('profile-photo-preview');
+      if (p) p.innerHTML = '<img src="' + me.photo + '" style="width:100%;height:100%;object-fit:cover;"/>';
+      updateBottomAv();
+      // 소켓 emit은 저장 버튼 클릭 시에만 (saveMyProfile에서 처리)
+    });
   };
+  reader.onerror = function(ev) { console.error('[FileReader]', ev); };
   reader.readAsDataURL(file);
   this.value = '';
 });
