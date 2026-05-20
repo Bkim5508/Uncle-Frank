@@ -333,7 +333,7 @@ function doLogin() {
   socket.on('message_received', function(data) {
     var c = chats.find(function(ch) { return ch.roomId === data.roomId; });
     if (!c) return;
-    c.messages.push({ s: data.sender === me.name ? 'me' : data.sender, t: data.text, time: data.time });
+    c.messages.push({ s: data.sender === me.name ? 'me' : data.sender, t: data.text, time: data.time, color: data.color || null });
     if (activeId === c.id) {
       renderChat(c);
     } else {
@@ -359,7 +359,7 @@ function makeChat(roomId, type, name, memberNames, rawMessages) {
     members: memberNames,
     unread: 0,
     messages: rawMessages.map(function(m) {
-      return { s: m.sender === me.name ? 'me' : m.sender, t: m.text, time: m.time };
+      return { s: m.sender === me.name ? 'me' : m.sender, t: m.text, time: m.time, color: m.color || null };
     })
   };
 }
@@ -618,9 +618,12 @@ function renderChat(c) {
       if (msg.s === 'sys') { msgsHtml += '<div class="dv">' + esc(msg.t) + '</div>'; return; }
       var isMe = msg.s === 'me';
       var sf = isMe ? null : friends.find(function(x){return x.name===msg.s;});
-      var mavContent = isMe
-        ? (me.photo ? '<img src="'+me.photo+'" style="width:100%;height:100%;object-fit:cover;"/>' : ufSvg(me.color))
-        : ((sf&&sf.photo) ? '<img src="'+sf.photo+'" style="width:100%;height:100%;object-fit:cover;"/>' : ufSvg(sf?sf.color:null));
+      // 색상 우선순위: 현재 friends 목록 → 메시지에 저장된 색상 → 기본값
+      var senderColor = isMe ? me.color : ((sf&&sf.color) || msg.color || '#888');
+      var senderPhoto = isMe ? me.photo : (sf ? sf.photo : null);
+      var mavContent = senderPhoto
+        ? '<img src="'+senderPhoto+'" style="width:100%;height:100%;object-fit:cover;"/>'
+        : ufSvg(senderColor);
       var mavHtml = '<div class="mav" style="background:#fff;border:0.5px solid rgba(100,160,210,0.4);">'+mavContent+'</div>';
       msgsHtml += '<div class="mr' + (isMe ? ' me' : '') + '">' + mavHtml + '<div class="mc">' + (!isMe ? '<span class="sn">' + esc(msg.s) + '</span>' : '') + '<div class="bl">' + esc(msg.t) + '</div><span class="mt">' + msg.time + '</span></div></div>';
     });

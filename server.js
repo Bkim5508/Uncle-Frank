@@ -13,7 +13,15 @@ const socketToName = new Map(); // socketId -> name
 const rooms = new Map();
 // name -> { status, photo, color }
 const profiles = new Map();
-const COLOR_PALETTE = ['#EF4444','#3B82F6','#22C55E','#A855F7','#F97316','#EC4899','#14B8A6','#6366F1'];
+const COLOR_PALETTE = ['#E53935','#1E88E5','#43A047','#8E24AA','#FB8C00','#00ACC1','#D81B60','#6D4C41'];
+
+// 메시지 배열에 발신자 색상 정보를 채워서 반환 (히스토리 전송 시 사용)
+function enrichMessages(messages) {
+  return messages.map(m => ({
+    ...m,
+    color: m.color || (profiles.get(m.sender) || {}).color || null
+  }));
+}
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'uncle-frank.html'));
@@ -41,7 +49,7 @@ io.on('connection', (socket) => {
         socket.join(roomId);
         userRooms.push({
           roomId, name: room.name, type: room.type,
-          members: [...room.members], messages: room.messages
+          members: [...room.members], messages: enrichMessages(room.messages)
         });
       }
     });
@@ -78,13 +86,13 @@ io.on('connection', (socket) => {
         ts.join(roomId);
         ts.emit('room_invited', {
           roomId, roomName: myName, type: 'dm',
-          members: [myName, targetName], messages: rooms.get(roomId).messages
+          members: [myName, targetName], messages: enrichMessages(rooms.get(roomId).messages)
         });
       }
     }
     socket.emit('room_created', {
       roomId, roomName: targetName, type: 'dm',
-      members: [myName, targetName], messages: rooms.get(roomId).messages
+      members: [myName, targetName], messages: enrichMessages(rooms.get(roomId).messages)
     });
   });
 
@@ -128,7 +136,8 @@ io.on('connection', (socket) => {
     const now = new Date();
     const h = now.getHours(), m = String(now.getMinutes()).padStart(2, '0');
     const time = (h < 12 ? '오전' : '오후') + ' ' + (h % 12 || 12) + ':' + m;
-    const msg = { sender: senderName, text, time };
+    const senderColor = (profiles.get(senderName) || {}).color || null;
+    const msg = { sender: senderName, text, time, color: senderColor };
     rooms.get(roomId).messages.push(msg);
     io.to(roomId).emit('message_received', { roomId, ...msg });
   });
