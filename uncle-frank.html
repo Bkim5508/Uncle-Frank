@@ -216,7 +216,10 @@ function groupAv(sz,rad){sz=sz||40;rad=rad||'12px';return '<div style="width:'+s
 function chatAv(c,sz,rad){
   if(c.avatarType==='group') return groupAv(sz,rad);
   var f=friends.find(function(x){return x.name===c.friendName;});
-  return ufAv(sz,rad,f?f.photo:null,f?f.color:null);
+  var p=pendingProfiles[c.friendName]||{};
+  var color=(f&&f.color)||p.color||null;
+  var photo=(f&&f.photo)||null;
+  return ufAv(sz,rad,photo,color);
 }
 function updateBottomAv(){var el=document.getElementById('bottom-av');if(!el)return;el.innerHTML=me.photo?'<img src="'+me.photo+'" style="width:100%;height:100%;object-fit:cover;"/>':ufSvg(me.color);}
 function updateSidebarLogo(){var s=document.querySelector('#logo-area svg');if(!s)return;var c=me.color||'#C84828';s.querySelectorAll('path').forEach(function(p){p.setAttribute('stroke',c);});var t=s.querySelector('text');if(t)t.setAttribute('fill',c);}

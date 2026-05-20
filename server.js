@@ -68,6 +68,10 @@ io.on('connection', (socket) => {
     profiles.forEach((p, n) => { if (n !== name) snapshot[n] = p; });
     if (Object.keys(snapshot).length > 0) socket.emit('profiles_snapshot', snapshot);
 
+    // 기존 접속자들에게 새 사용자 프로필 브로드캐스트 — 친구 목록 색상 실시간 동기화
+    const loginProfile = profiles.get(name);
+    socket.broadcast.emit('profile_updated', { name, status: loginProfile.status, photo: loginProfile.photo, color: loginProfile.color });
+
     io.emit('users_updated', [...nameToSocket.keys()]);
   });
 
