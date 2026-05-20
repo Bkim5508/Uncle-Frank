@@ -11,6 +11,8 @@ const nameToSocket = new Map(); // name -> socketId
 const socketToName = new Map(); // socketId -> name
 // roomId -> { name, type, members: Set<name>, messages: [{sender, text, time}] }
 const rooms = new Map();
+// name -> { status, photo }
+const profiles = new Map();
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'uncle-frank.html'));
@@ -43,6 +45,11 @@ io.on('connection', (socket) => {
       }
     });
     if (userRooms.length > 0) socket.emit('room_list', userRooms);
+
+    // 기존 프로필 스냅샷 전송
+    const snapshot = {};
+    profiles.forEach((p, n) => { snapshot[n] = p; });
+    if (Object.keys(snapshot).length > 0) socket.emit('profiles_snapshot', snapshot);
 
     io.emit('users_updated', [...nameToSocket.keys()]);
   });
@@ -91,6 +98,15 @@ io.on('connection', (socket) => {
       }
     });
     socket.emit('room_created', { roomId, roomName, type: 'group', members: allMembers, messages: [] });
+  });
+
+  socket.on('update_profile', ({ status, photo }) => {
+    const name = socketToName.get(socket.id);
+    if (!name) return;
+    const cleanStatus = typeof status === 'string' ? status.trim().slice(0, 100) : '';
+    const cleanPhoto = typeof photo === 'string' && photo.startsWith('data:image/') ? photo : null;
+    profiles.set(name, { status: cleanStatus, photo: cleanPhoto });
+    io.emit('profile_updated', { name, status: cleanStatus, photo: cleanPhoto });
   });
 
   socket.on('send_message', ({ roomId, text }) => {
